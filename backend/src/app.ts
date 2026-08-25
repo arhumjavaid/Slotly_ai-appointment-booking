@@ -31,11 +31,11 @@ export function createApp(): Express {
       // sent with every request, so a permissive CORS policy would be a CSRF
       // primitive rather than a convenience.
       origin(origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error('Origin not allowed by CORS'));
+        // Reject by withholding the header rather than by throwing: throwing
+        // surfaces as a 500 and fills production logs with "unhandled error"
+        // for every stray cross-origin probe. Without the header the browser
+        // blocks the response itself, which is what actually enforces CORS.
+        callback(null, !origin || allowedOrigins.includes(origin));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
