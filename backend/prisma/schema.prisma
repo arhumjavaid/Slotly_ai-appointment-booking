@@ -48,6 +48,12 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  // Booking preferences. These are the fallbacks used when a request does not
+  // state a timezone or a duration, so they apply equally to the manual form
+  // and to anything the assistant books.
+  timezone               String @default("UTC") @db.VarChar(64)
+  defaultDurationMinutes Int    @default(30) @map("default_duration_minutes")
+
   appointments   Appointment[]
   chatSessions   ChatSession[]
   aiInteractions AiInteraction[]

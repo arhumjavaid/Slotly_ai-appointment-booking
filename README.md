@@ -196,12 +196,14 @@ echo 'NEXT_PUBLIC_API_URL=http://localhost:4000' > frontend/.env.local
 
 ### 3. Create the schema and seed it
 
-Apply the SQL migration, then seed:
+Apply the SQL migrations in order, then seed:
 
 ```bash
 cd backend
 npx prisma db execute --schema prisma/schema.prisma \
   --file ../database/migrations/001_initial_schema.sql
+npx prisma db execute --schema prisma/schema.prisma \
+  --file ../database/migrations/002_user_preferences.sql
 npm run db:seed
 ```
 
@@ -270,20 +272,26 @@ docker compose up -d
 Prisma owns the schema. `backend/prisma/schema.prisma` is the source of truth,
 and `npm run db:migrate` generates versioned SQL migrations from it.
 
-`database/migrations/001_initial_schema.sql` is the same schema written as plain
-SQL, for review, for provisioning by hand, or to paste into the Supabase SQL
-editor. `database/seeds/seed.sql` mirrors the TypeScript seed. The TypeScript
+`database/migrations/` holds the same schema written as plain SQL, for review,
+for provisioning by hand, or to paste into the Supabase SQL editor — numbered,
+and applied in order (`001_initial_schema.sql`, then `002_user_preferences.sql`,
+which adds the per-account timezone and default appointment length behind the
+settings screen). `database/seeds/seed.sql` mirrors the TypeScript seed. The TypeScript
 seed is the one to prefer — it hashes passwords at the configured cost and dates
 appointments relative to today, so the "upcoming" view is never empty.
 
-To apply the SQL migration directly against Supabase without `psql` installed,
+To apply a SQL migration directly against Supabase without `psql` installed,
 Prisma can run the file for you — from `backend/`, reading the connection string
-from `.env`:
+from `.env`. Note that this targets whatever `DATABASE_URL` points at, which for
+this project is the hosted database, not a local one:
 
 ```bash
 npx prisma db execute --schema prisma/schema.prisma \
-  --file ../database/migrations/001_initial_schema.sql
+  --file ../database/migrations/002_user_preferences.sql
 ```
+
+The test database in `.env.test` is separate and needs the same files applied to
+it, via `--url "$TEST_DATABASE_URL"`.
 
 ### Supabase connection strings
 

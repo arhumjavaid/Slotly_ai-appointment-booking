@@ -13,8 +13,8 @@ function Bubble({ message }: { message: ChatMessage }) {
         className={cn(
           'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
           isUser
-            ? 'rounded-br-md bg-accent text-white'
-            : 'rounded-bl-md border border-line bg-surface text-ink',
+            ? 'rounded-br-md bg-navy text-white'
+            : 'rounded-bl-md border border-line bg-surface text-ink shadow-card',
         )}
       >
         {message.content}
@@ -50,9 +50,11 @@ export function ChatTranscript({
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length, isSending]);
 
+  // Paper behind the transcript so the assistant's white bubbles read as
+  // bubbles instead of dissolving into the card.
   return (
     <div
-      className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+      className="flex-1 space-y-3 overflow-y-auto bg-paper px-4 py-4"
       role="log"
       aria-live="polite"
       aria-label="Conversation with the booking assistant"

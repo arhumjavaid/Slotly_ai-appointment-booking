@@ -155,6 +155,44 @@ describe('appointments', () => {
       expect(confirmed.body.data.appointments).toHaveLength(0);
     });
 
+    it('excludes cancelled appointments from the upcoming scope', async () => {
+      const kept = await createAppointment({ appointmentType: 'Mechanic' });
+      const dropped = await createAppointment({ appointmentType: 'Haircut', startTime: '17:00' });
+
+      await api()
+        .patch(`/api/appointments/${dropped.body.data.appointment.id}`)
+        .set('Cookie', user.cookie)
+        .send({ status: 'CANCELLED' })
+        .expect(200);
+
+      const response = await api()
+        .get('/api/appointments?scope=upcoming')
+        .set('Cookie', user.cookie)
+        .expect(200);
+
+      // The count drives the dashboard's "you have N coming up" line, so it has
+      // to drop the cancellation too — not just the list.
+      expect(response.body.data.appointments).toHaveLength(1);
+      expect(response.body.data.appointments[0].id).toBe(kept.body.data.appointment.id);
+      expect(response.body.data.pagination.total).toBe(1);
+    });
+
+    it('still returns cancelled appointments when the status is asked for explicitly', async () => {
+      const created = await createAppointment();
+      await api()
+        .patch(`/api/appointments/${created.body.data.appointment.id}`)
+        .set('Cookie', user.cookie)
+        .send({ status: 'CANCELLED' })
+        .expect(200);
+
+      const response = await api()
+        .get('/api/appointments?scope=upcoming&status=CANCELLED')
+        .set('Cookie', user.cookie)
+        .expect(200);
+
+      expect(response.body.data.appointments).toHaveLength(1);
+    });
+
     it('rejects an invalid query parameter', async () => {
       const response = await api()
         .get('/api/appointments?status=NOT_A_STATUS')

@@ -23,6 +23,12 @@ export function formatTimeLabel(time: string): string {
   return `${displayHour}:${minutePart} ${suffix}`;
 }
 
+/**
+ * The appointment lengths offered anywhere in the app. Shared so the booking
+ * form and the default-length setting can never offer different choices.
+ */
+export const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120, 180, 240];
+
 export function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);

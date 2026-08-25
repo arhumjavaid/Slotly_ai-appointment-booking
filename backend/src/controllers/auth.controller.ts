@@ -3,7 +3,13 @@ import { authService } from '../services/auth/auth.service';
 import { currentUser } from '../middleware/auth';
 import { clearAuthCookie, setAuthCookie, signAuthToken } from '../utils/security';
 import { sendSuccess } from '../utils/http';
-import type { LoginInput, RegisterInput } from '../schemas/auth.schema';
+import type {
+  ChangePasswordInput,
+  DeleteAccountInput,
+  LoginInput,
+  RegisterInput,
+  UpdateProfileInput,
+} from '../schemas/auth.schema';
 
 /**
  * Controllers stay thin: read validated input, delegate, shape the response.
@@ -26,6 +32,29 @@ export const authController = {
   async me(req: Request, res: Response) {
     const user = await authService.getById(currentUser(req).id);
     return sendSuccess(res, { user });
+  },
+
+  async updateProfile(req: Request, res: Response) {
+    const user = await authService.updateProfile(currentUser(req).id, req.body as UpdateProfileInput);
+    // No cookie re-issue: the token's only identity claims are the id and the
+    // email, and neither of them can change through this route.
+    return sendSuccess(res, { user });
+  },
+
+  async changePassword(req: Request, res: Response) {
+    const user = await authService.changePassword(
+      currentUser(req).id,
+      req.body as ChangePasswordInput,
+    );
+    // Re-issued so the caller keeps a working session after the change.
+    setAuthCookie(res, signAuthToken({ sub: user.id, email: user.email }));
+    return sendSuccess(res, { user });
+  },
+
+  async deleteAccount(req: Request, res: Response) {
+    await authService.deleteAccount(currentUser(req).id, req.body as DeleteAccountInput);
+    clearAuthCookie(res);
+    return sendSuccess(res, { deleted: true });
   },
 
   async logout(_req: Request, res: Response) {

@@ -58,13 +58,16 @@ export function TimeRail({ appointments, onCancel, cancellingId }: TimeRailProps
               const status = STATUS_STYLES[appointment.status];
 
               return (
-                <li key={appointment.id} className="group relative flex gap-4 py-2.5">
+                <li
+                  key={appointment.id}
+                  className="group relative -mx-2 flex gap-4 rounded-lg px-2 py-2.5 transition-colors hover:bg-paper"
+                >
                   {/* The rail: time label, then a bar sized by duration. */}
-                  <div className="flex w-[64px] shrink-0 flex-col items-end pt-0.5">
+                  <div className="flex w-[74px] shrink-0 flex-col items-end pt-0.5">
                     <span className={cn('tnum text-[13px]', cancelled ? 'text-ink-3' : 'text-ink')}>
                       {formatTimeLabel(appointment.startTime)}
                     </span>
-                    <span className="tnum text-[11px] text-ink-3">
+                    <span className="tnum whitespace-nowrap text-[11px] text-ink-3">
                       {formatDuration(appointment.durationMinutes)}
                     </span>
                   </div>
@@ -73,7 +76,7 @@ export function TimeRail({ appointments, onCancel, cancellingId }: TimeRailProps
                     aria-hidden="true"
                     className={cn(
                       'mt-1 w-[3px] shrink-0 rounded-full',
-                      cancelled ? 'bg-line-strong' : 'bg-accent',
+                      cancelled ? 'bg-line-strong' : 'bg-navy',
                     )}
                     style={{ height: `${durationBarHeight(appointment.durationMinutes)}px` }}
                   />

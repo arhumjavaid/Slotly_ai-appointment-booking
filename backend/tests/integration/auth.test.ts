@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { api, createTestUser, resetDatabase } from '../helpers/testApp';
+import { api, createTestUser, resetDatabase, validAppointmentPayload } from '../helpers/testApp';
 import { prisma } from '../../src/db/prisma';
 
 describe('authentication', () => {
@@ -140,6 +140,183 @@ describe('authentication', () => {
 
       const cookies = response.headers['set-cookie'] as unknown as string[];
       expect(cookies[0]).toMatch(/=;/);
+    });
+  });
+
+  describe('PATCH /api/auth/me', () => {
+    it('updates the profile and the booking preferences', async () => {
+      const user = await createTestUser();
+
+      const response = await api()
+        .patch('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ name: 'Renamed Person', timezone: 'Asia/Karachi', defaultDurationMinutes: 45 })
+        .expect(200);
+
+      expect(response.body.data.user.name).toBe('Renamed Person');
+      expect(response.body.data.user.timezone).toBe('Asia/Karachi');
+      expect(response.body.data.user.defaultDurationMinutes).toBe(45);
+    });
+
+    it('ignores an email sent alongside a real change', async () => {
+      const user = await createTestUser();
+
+      const response = await api()
+        .patch('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ name: 'Renamed Person', email: `hijack.${Date.now()}@example.test` })
+        .expect(200);
+
+      // The schema has no `email` key, so validate() strips it before the
+      // service runs. The name change lands; the address does not move.
+      expect(response.body.data.user.name).toBe('Renamed Person');
+      expect(response.body.data.user.email).toBe(user.email);
+    });
+
+    it('rejects a body that only tries to change the email', async () => {
+      const user = await createTestUser();
+
+      // Stripped down to {}, which the "at least one field" rule refuses —
+      // so this reads as a rejection rather than a silent success.
+      await api()
+        .patch('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ email: `hijack.${Date.now()}@example.test` })
+        .expect(400);
+
+      const me = await api().get('/api/auth/me').set('Cookie', user.cookie).expect(200);
+      expect(me.body.data.user.email).toBe(user.email);
+    });
+
+    it('cannot take over another account’s email', async () => {
+      const other = await createTestUser();
+      const user = await createTestUser();
+
+      await api()
+        .patch('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ name: 'Impostor', email: other.email })
+        .expect(200);
+
+      const me = await api().get('/api/auth/me').set('Cookie', user.cookie).expect(200);
+      expect(me.body.data.user.email).toBe(user.email);
+    });
+
+    it('rejects an unknown timezone and an out-of-range duration', async () => {
+      const user = await createTestUser();
+
+      await api()
+        .patch('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ timezone: 'Mars/Olympus_Mons' })
+        .expect(400);
+
+      await api()
+        .patch('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ defaultDurationMinutes: 9000 })
+        .expect(400);
+    });
+
+    it('rejects an empty body rather than writing nothing', async () => {
+      const user = await createTestUser();
+      await api().patch('/api/auth/me').set('Cookie', user.cookie).send({}).expect(400);
+    });
+
+    it('requires a session', async () => {
+      await api().patch('/api/auth/me').send({ name: 'Nobody' }).expect(401);
+    });
+  });
+
+  describe('POST /api/auth/change-password', () => {
+    it('changes the password and leaves the old one unusable', async () => {
+      const user = await createTestUser();
+      const newPassword = 'Rep1acement';
+
+      await api()
+        .post('/api/auth/change-password')
+        .set('Cookie', user.cookie)
+        .send({ currentPassword: user.password, newPassword })
+        .expect(200);
+
+      await api()
+        .post('/api/auth/login')
+        .send({ email: user.email, password: user.password })
+        .expect(401);
+
+      await api()
+        .post('/api/auth/login')
+        .send({ email: user.email, password: newPassword })
+        .expect(200);
+    });
+
+    it('rejects a wrong current password', async () => {
+      const user = await createTestUser();
+
+      const response = await api()
+        .post('/api/auth/change-password')
+        .set('Cookie', user.cookie)
+        .send({ currentPassword: 'NotMyPassw0rd', newPassword: 'Rep1acement' })
+        .expect(400);
+
+      expect(response.body.error.details?.[0]?.field).toBe('currentPassword');
+    });
+
+    it('enforces the password policy on the new password', async () => {
+      const user = await createTestUser();
+
+      await api()
+        .post('/api/auth/change-password')
+        .set('Cookie', user.cookie)
+        .send({ currentPassword: user.password, newPassword: 'weak' })
+        .expect(400);
+    });
+
+    it('requires a session', async () => {
+      await api()
+        .post('/api/auth/change-password')
+        .send({ currentPassword: 'Passw0rdTest', newPassword: 'Rep1acement' })
+        .expect(401);
+    });
+  });
+
+  describe('DELETE /api/auth/me', () => {
+    it('deletes the account and its appointments', async () => {
+      const user = await createTestUser();
+
+      await api()
+        .post('/api/appointments')
+        .set('Cookie', user.cookie)
+        .send(validAppointmentPayload())
+        .expect(201);
+
+      await api()
+        .delete('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ password: user.password })
+        .expect(200);
+
+      // The session cookie now points at a row that is gone.
+      await api().get('/api/auth/me').set('Cookie', user.cookie).expect(401);
+
+      expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
+      expect(await prisma.appointment.count({ where: { userId: user.id } })).toBe(0);
+    });
+
+    it('refuses to delete without the correct password', async () => {
+      const user = await createTestUser();
+
+      await api()
+        .delete('/api/auth/me')
+        .set('Cookie', user.cookie)
+        .send({ password: 'NotMyPassw0rd' })
+        .expect(400);
+
+      expect(await prisma.user.count({ where: { id: user.id } })).toBe(1);
+    });
+
+    it('requires a session', async () => {
+      await api().delete('/api/auth/me').send({ password: 'Passw0rdTest' }).expect(401);
     });
   });
 });

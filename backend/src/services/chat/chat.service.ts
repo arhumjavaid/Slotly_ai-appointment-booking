@@ -2,6 +2,7 @@ import type { ChatMessage } from '@prisma/client';
 import { env } from '../../config/env';
 import { ApiError, ErrorCode } from '../../utils/apiError';
 import { chatRepository } from '../../repositories/chat.repository';
+import { userRepository } from '../../repositories/user.repository';
 import {
   emptyDraft,
   storedDraftSchema,
@@ -106,7 +107,10 @@ export class ChatService {
   constructor(private readonly ai: AiService = defaultAiService) {}
 
   async createSession(userId: string, timezone?: string) {
-    const tz = timezone ?? env.DEFAULT_TIMEZONE;
+    // The caller's timezone wins when it sends one; otherwise the account's
+    // saved preference, and only then the server default.
+    const user = await userRepository.findById(userId);
+    const tz = timezone ?? user?.timezone ?? env.DEFAULT_TIMEZONE;
     const session = await chatRepository.createSession(userId, emptyDraft(tz) as never);
 
     const greeting = this.ai.isAvailable
@@ -176,7 +180,8 @@ export class ChatService {
       throw ApiError.conflict(ErrorCode.CONFLICT, 'This conversation has already been completed');
     }
 
-    const tz = timezone ?? env.DEFAULT_TIMEZONE;
+    const user = await userRepository.findById(userId);
+    const tz = timezone ?? user?.timezone ?? env.DEFAULT_TIMEZONE;
     let draft = readDraft(session.draft, tz);
     draft = { ...draft, timezone: draft.timezone ?? tz };
 
@@ -202,6 +207,9 @@ export class ChatService {
         missingFields: missingBefore,
         readyToConfirm: missingBefore.length === 0,
         timezone: draft.timezone ?? tz,
+        // Keeps the duration the assistant quotes in its summary the same as
+        // the one the booking will actually use.
+        defaultDurationMinutes: user?.defaultDurationMinutes,
         sessionId,
         userId,
       });
@@ -295,13 +303,18 @@ export class ChatService {
     sessionId: string,
     draft: StoredDraft,
   ): Promise<AppointmentView> {
+    // An appointment the assistant books without a stated length uses the
+    // account's default, exactly as the manual form's pre-filled value does.
+    const user = await userRepository.findById(userId);
+
     const candidate = {
       appointmentType: draft.appointmentType,
       date: draft.date,
       startTime: draft.startTime,
-      durationMinutes: draft.durationMinutes ?? DEFAULT_DURATION_MINUTES,
+      durationMinutes:
+        draft.durationMinutes ?? user?.defaultDurationMinutes ?? DEFAULT_DURATION_MINUTES,
       notes: draft.notes,
-      timezone: draft.timezone ?? env.DEFAULT_TIMEZONE,
+      timezone: draft.timezone ?? user?.timezone ?? env.DEFAULT_TIMEZONE,
     };
 
     const parsed = createAppointmentSchema.safeParse(candidate);

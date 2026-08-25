@@ -31,8 +31,10 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h1 className="font-display text-[32px] leading-tight text-ink">Sign in</h1>
-      <p className="mt-1 text-sm text-ink-2">Pick up where you left off.</p>
+      <h1 className="font-display text-[34px] leading-[1.1] text-ink sm:text-[40px]">
+        Welcome back
+      </h1>
+      <p className="mt-2 text-sm text-ink-2">Sign in to continue booking appointments.</p>
 
       <form onSubmit={onSubmit} noValidate className="mt-7 space-y-4">
         {login.isError && (
@@ -44,7 +46,7 @@ export default function LoginPage() {
             id="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder="e.g., you@example.com"
             invalid={Boolean(errors.email)}
             {...register('email')}
           />
@@ -55,20 +57,26 @@ export default function LoginPage() {
             id="password"
             type="password"
             autoComplete="current-password"
+            placeholder="Enter your password"
             invalid={Boolean(errors.password)}
             {...register('password')}
           />
         </Field>
 
-        <Button type="submit" size="lg" loading={login.isPending} className="w-full">
+        <Button
+          type="submit"
+          size="lg"
+          loading={login.isPending}
+          className="mt-2 h-11 w-full"
+        >
           Sign in
         </Button>
       </form>
 
-      <p className="mt-6 text-[13px] text-ink-2">
-        New here?{' '}
-        <Link href="/register" className="font-medium text-accent hover:underline">
-          Create an account
+      <p className="mt-5 text-center text-[13px] text-ink-2">
+        Don&apos;t have an account?{' '}
+        <Link href="/register" className="font-semibold text-ink underline-offset-4 hover:underline">
+          Create account
         </Link>
       </p>
     </div>

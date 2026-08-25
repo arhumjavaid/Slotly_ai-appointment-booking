@@ -49,7 +49,7 @@ export default function AppointmentsPage() {
         </Link>
       </div>
 
-      <div className="flex gap-1 border-b border-line">
+      <div className="inline-flex gap-1 rounded-lg border border-line bg-paper p-1">
         {FILTERS.map((filter) => (
           <button
             key={filter.key}
@@ -57,10 +57,10 @@ export default function AppointmentsPage() {
             onClick={() => setScope(filter.key)}
             aria-pressed={scope === filter.key}
             className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-[13px] font-medium transition-colors',
+              'rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
               scope === filter.key
-                ? 'border-accent text-ink'
-                : 'border-transparent text-ink-3 hover:text-ink',
+                ? 'bg-surface text-ink shadow-card'
+                : 'text-ink-3 hover:text-ink',
             )}
           >
             {filter.label}

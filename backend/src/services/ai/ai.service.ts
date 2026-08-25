@@ -26,6 +26,8 @@ export interface ExtractionContext {
   missingFields: string[];
   readyToConfirm: boolean;
   timezone: string;
+  /** The account's default appointment length; falls back to the app default. */
+  defaultDurationMinutes?: number;
   sessionId?: string;
   userId?: string;
 }
@@ -69,18 +71,19 @@ export class AiService {
 
   private buildMessages(context: ExtractionContext, repairHint?: string): ChatTurn[] {
     const now = describeNow(context.timezone);
+    const defaultDuration = context.defaultDurationMinutes ?? DEFAULT_DURATION_MINUTES;
 
     const systemPrompt = renderPrompt('system_prompt.jinja', {
       product_name: PRODUCT_NAME,
       user_name: context.userName,
-      default_duration: DEFAULT_DURATION_MINUTES,
+      default_duration: defaultDuration,
       now,
       draft: context.draft,
     });
 
     const reminder = renderPrompt('appointment_extraction.jinja', {
       now,
-      default_duration: DEFAULT_DURATION_MINUTES,
+      default_duration: defaultDuration,
       missing_fields: context.missingFields,
       ready_to_confirm: context.readyToConfirm,
     });

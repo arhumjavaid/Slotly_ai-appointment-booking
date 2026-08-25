@@ -17,8 +17,8 @@ import { cn } from '@/lib/format';
  */
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-accent text-white hover:bg-accent-hover disabled:bg-line-strong disabled:text-ink-3',
-  secondary: 'bg-surface text-ink border border-line-strong hover:bg-paper disabled:text-ink-3',
+  primary: 'bg-navy text-white shadow-card hover:bg-navy-hover disabled:bg-line-strong disabled:text-ink-3 disabled:shadow-none',
+  secondary: 'bg-surface text-ink border border-line-strong shadow-card hover:bg-paper disabled:text-ink-3 disabled:shadow-none',
   ghost: 'text-ink-2 hover:bg-paper hover:text-ink',
   danger: 'bg-surface text-danger border border-line-strong hover:bg-danger-soft',
 } as const;
@@ -93,7 +93,7 @@ interface FieldProps {
 export function Field({ label, htmlFor, error, hint, children }: FieldProps) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="block text-[13px] font-medium text-ink-2">
+      <label htmlFor={htmlFor} className="block text-[13px] font-medium text-ink">
         {label}
       </label>
       {children}
@@ -110,7 +110,8 @@ export function Field({ label, htmlFor, error, hint, children }: FieldProps) {
 
 const CONTROL_BASE =
   'w-full rounded-lg border bg-surface px-3 text-sm text-ink placeholder:text-ink-3 ' +
-  'transition-colors focus:border-accent focus:outline-none disabled:bg-paper disabled:text-ink-3';
+  'transition-[color,border-color,box-shadow] focus:border-navy focus:outline-none ' +
+  'focus:ring-2 focus:ring-navy/15 disabled:bg-paper disabled:text-ink-3';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
   function Input({ className, invalid, ...props }, ref) {
@@ -118,7 +119,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       <input
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={cn(CONTROL_BASE, 'h-10', invalid ? 'border-danger' : 'border-line-strong', className)}
+        className={cn(CONTROL_BASE, 'h-11', invalid ? 'border-danger' : 'border-line-strong', className)}
         {...props}
       />
     );
@@ -133,7 +134,7 @@ export const Select = forwardRef<
     <select
       ref={ref}
       aria-invalid={invalid || undefined}
-      className={cn(CONTROL_BASE, 'h-10', invalid ? 'border-danger' : 'border-line-strong', className)}
+      className={cn(CONTROL_BASE, 'h-11', invalid ? 'border-danger' : 'border-line-strong', className)}
       {...props}
     >
       {children}
@@ -162,7 +163,9 @@ export const Textarea = forwardRef<
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn('rounded-xl border border-line bg-surface', className)}>{children}</div>
+    <div className={cn('rounded-xl border border-line bg-surface shadow-card', className)}>
+      {children}
+    </div>
   );
 }
 

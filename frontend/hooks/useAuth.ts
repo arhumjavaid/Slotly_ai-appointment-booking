@@ -3,7 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
-import { authService, type LoginPayload, type RegisterPayload } from '@/services/auth';
+import {
+  authService,
+  type ChangePasswordPayload,
+  type LoginPayload,
+  type RegisterPayload,
+  type UpdateProfilePayload,
+} from '@/services/auth';
 import type { User } from '@/types/api';
 
 export const AUTH_QUERY_KEY = ['auth', 'me'] as const;
@@ -54,6 +60,43 @@ export function useLogin() {
 
 export function useRegister() {
   return useAuthMutation<RegisterPayload>(authService.register, '/dashboard');
+}
+
+/**
+ * Settings writes return the updated user, so each one seeds the auth cache
+ * directly rather than invalidating it and waiting for a round trip. The header
+ * and every other reader update in the same tick as the success message.
+ */
+function useProfileMutation<TPayload>(action: (payload: TPayload) => Promise<{ user: User }>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: action,
+    onSuccess: (result) => queryClient.setQueryData(AUTH_QUERY_KEY, result.user),
+  });
+}
+
+export function useUpdateProfile() {
+  return useProfileMutation<UpdateProfilePayload>(authService.updateProfile);
+}
+
+export function useChangePassword() {
+  return useProfileMutation<ChangePasswordPayload>(authService.changePassword);
+}
+
+export function useDeleteAccount() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (password: string) => authService.deleteAccount(password),
+    onSuccess: () => {
+      // The account is gone; drop every cached response with it so nothing of
+      // it survives into the next session on this device.
+      queryClient.clear();
+      router.replace('/register');
+    },
+  });
 }
 
 export function useLogout() {

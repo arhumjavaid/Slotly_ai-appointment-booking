@@ -3,9 +3,11 @@
 /*
  * Design tokens.
  *
- * A cool neutral scale carries the whole interface; the accent appears only on
- * primary actions and the time rail, so the eye always knows where the next
- * step is. Status colours are reserved for appointment state and nothing else.
+ * A cool neutral scale carries the whole interface. The two blues are not
+ * interchangeable: navy is the product's own voice — primary actions, the time
+ * rail, the brand — while the indigo accent belongs to the AI assistant and
+ * marks anything it touched. Status colours are reserved for appointment state
+ * and nothing else.
  */
 @theme {
   --color-ink: #131519;
@@ -19,6 +21,15 @@
   --color-accent: #2f4bd8;
   --color-accent-hover: #2540bd;
   --color-accent-soft: #eef1fe;
+
+  /* Brand navy: the wordmark, the logo mark, and every primary action. */
+  --color-navy: #16255c;
+  --color-navy-hover: #101c48;
+  --color-navy-soft: #eef1f8;
+
+  /* Two levels only: cards sit on the canvas, and lift on hover. */
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-lift: 0 2px 4px rgba(16, 24, 40, 0.04), 0 12px 24px -8px rgba(16, 24, 40, 0.14);
 
   --color-ok: #1a7a4c;
   --color-ok-soft: #e8f5ee;
@@ -53,7 +64,7 @@
 
   /* Keyboard focus is always visible; pointer focus is not. */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-navy);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -67,6 +78,21 @@
   .font-display {
     font-family: var(--font-display);
     letter-spacing: -0.015em;
+  }
+
+  /*
+   * The authentication canvas: white everywhere, with one soft navy glow
+   * bleeding out of the lower-left corner so the brand half has depth without
+   * introducing a second colour.
+   */
+  .auth-canvas {
+    background-color: var(--color-surface);
+    background-image: radial-gradient(
+      68% 58% at 6% 96%,
+      rgba(22, 37, 92, 0.09) 0%,
+      rgba(22, 37, 92, 0.035) 42%,
+      rgba(22, 37, 92, 0) 72%
+    );
   }
 
   /* Times are data: lining, tabular figures so columns of times align. */

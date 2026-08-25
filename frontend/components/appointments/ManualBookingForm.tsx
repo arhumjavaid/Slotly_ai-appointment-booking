@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { ApiError } from '@/lib/api';
 import { Alert, Button, Field, Input, Select, Textarea } from '@/components/ui';
 import { useCreateAppointment } from '@/hooks/useAppointments';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { DURATION_OPTIONS, formatDuration } from '@/lib/format';
 import type { Appointment } from '@/types/api';
 
 /**
@@ -29,8 +31,6 @@ const bookingFormSchema = z.object({
 
 type BookingFormValues = z.input<typeof bookingFormSchema>;
 
-const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120, 180, 240];
-
 const SUGGESTED_TYPES = ['Dentist', 'Doctor', 'Haircut', 'Consultation', 'Physiotherapy'];
 
 function todayIsoDate(): string {
@@ -47,6 +47,7 @@ interface ManualBookingFormProps {
 
 export function ManualBookingForm({ onBooked, defaults }: ManualBookingFormProps) {
   const createAppointment = useCreateAppointment();
+  const { user } = useCurrentUser();
 
   const {
     register,
@@ -60,7 +61,8 @@ export function ManualBookingForm({ onBooked, defaults }: ManualBookingFormProps
       appointmentType: defaults?.appointmentType ?? '',
       date: defaults?.date ?? todayIsoDate(),
       startTime: defaults?.startTime ?? '09:00',
-      durationMinutes: defaults?.durationMinutes ?? 30,
+      // A handover from chat wins; otherwise the account's saved default.
+      durationMinutes: defaults?.durationMinutes ?? user?.defaultDurationMinutes ?? 30,
       notes: defaults?.notes ?? '',
     },
   });
@@ -138,7 +140,7 @@ export function ManualBookingForm({ onBooked, defaults }: ManualBookingFormProps
           <Select id="durationMinutes" invalid={Boolean(errors.durationMinutes)} {...register('durationMinutes')}>
             {DURATION_OPTIONS.map((minutes) => (
               <option key={minutes} value={minutes}>
-                {minutes < 60 ? `${minutes} minutes` : `${minutes / 60} hour${minutes > 60 ? 's' : ''}`}
+                {formatDuration(minutes)}
               </option>
             ))}
           </Select>
@@ -158,7 +160,11 @@ export function ManualBookingForm({ onBooked, defaults }: ManualBookingFormProps
         <Button type="submit" loading={isSubmitting || createAppointment.isPending}>
           Book appointment
         </Button>
-        <p className="text-[13px] text-ink-3">Times are in your local timezone.</p>
+        {/* The booking is stored in the account's timezone, which is a setting —
+            naming it beats claiming "your local timezone" when the two differ. */}
+        <p className="text-[13px] text-ink-3">
+          {user ? `Times are in ${user.timezone}.` : 'Times are in your saved timezone.'}
+        </p>
       </div>
     </form>
   );

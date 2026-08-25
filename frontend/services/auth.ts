@@ -12,6 +12,18 @@ export interface LoginPayload {
   password: string;
 }
 
+/** Email is absent by design — it is fixed at registration. */
+export interface UpdateProfilePayload {
+  name?: string;
+  timezone?: string;
+  defaultDurationMinutes?: number;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export const authService = {
   register(payload: RegisterPayload) {
     return apiRequest<{ user: User }>('/auth/register', { method: 'POST', body: payload });
@@ -23,6 +35,21 @@ export const authService = {
 
   me() {
     return apiRequest<{ user: User }>('/auth/me');
+  },
+
+  updateProfile(payload: UpdateProfilePayload) {
+    return apiRequest<{ user: User }>('/auth/me', { method: 'PATCH', body: payload });
+  },
+
+  changePassword(payload: ChangePasswordPayload) {
+    return apiRequest<{ user: User }>('/auth/change-password', { method: 'POST', body: payload });
+  },
+
+  deleteAccount(password: string) {
+    return apiRequest<{ deleted: boolean }>('/auth/me', {
+      method: 'DELETE',
+      body: { password },
+    });
   },
 
   logout() {

@@ -89,7 +89,7 @@ export function DraftPanel({
   };
 
   return (
-    <div className="rounded-xl border border-line bg-surface p-4">
+    <div className="rounded-xl border border-line bg-surface p-4 shadow-card">
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
         Appointment summary
       </p>
@@ -100,6 +100,14 @@ export function DraftPanel({
         <Row label="Time" value={summary.time} placeholder="Not set yet" />
         <Row label="Duration" value={summary.duration} placeholder="30 min (default)" />
       </div>
+
+      {/* Notes are optional, so the row only appears once there is one to check. */}
+      {draft?.notes && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-[13px] text-ink-3">Notes</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink">{draft.notes}</p>
+        </div>
+      )}
 
       {readyToConfirm ? (
         <div className="mt-4">

@@ -3,6 +3,7 @@ import { env } from '../../config/env';
 import { ErrorCode, ApiError } from '../../utils/apiError';
 import { addMinutes, utcToZonedParts, zonedTimeToUtc } from '../../utils/time';
 import { appointmentRepository } from '../../repositories/appointment.repository';
+import { userRepository } from '../../repositories/user.repository';
 import type {
   CreateAppointmentInput,
   ListAppointmentsQuery,
@@ -95,7 +96,11 @@ export const appointmentService = {
     input: CreateAppointmentInput,
     options: CreateOptions = {},
   ): Promise<AppointmentView> {
-    const timezone = input.timezone ?? env.DEFAULT_TIMEZONE;
+    // Falls back to the account's saved timezone before the server-wide
+    // default, so the preference reaches the manual form and the assistant
+    // alike without either caller having to remember to send it.
+    const user = await userRepository.findById(userId);
+    const timezone = input.timezone ?? user?.timezone ?? env.DEFAULT_TIMEZONE;
     const { startsAt, endsAt } = resolveWindow(
       input.date,
       input.startTime,
@@ -129,7 +134,15 @@ export const appointmentService = {
   async list(userId: string, query: ListAppointmentsQuery) {
     const where: Prisma.AppointmentWhereInput = {};
 
-    if (query.status) where.status = query.status;
+    if (query.status) {
+      where.status = query.status;
+    } else if (query.scope === 'upcoming') {
+      // "Upcoming" means still going to happen. A cancelled appointment has a
+      // future start time but is not coming up, so it would otherwise inflate
+      // both the list and the count. An explicit `status` still wins, so
+      // status=CANCELLED&scope=upcoming remains a way to ask for exactly that.
+      where.status = { not: 'CANCELLED' };
+    }
 
     const startsAtFilter: Prisma.DateTimeFilter = {};
     if (query.from) startsAtFilter.gte = new Date(`${query.from}T00:00:00.000Z`);

@@ -4,7 +4,13 @@ import { requireAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLimiter } from '../middleware/rateLimit';
 import { asyncHandler } from '../utils/http';
-import { loginSchema, registerSchema } from '../schemas/auth.schema';
+import {
+  changePasswordSchema,
+  deleteAccountSchema,
+  loginSchema,
+  registerSchema,
+  updateProfileSchema,
+} from '../schemas/auth.schema';
 
 export const authRoutes = Router();
 
@@ -18,5 +24,30 @@ authRoutes.post(
 authRoutes.post('/login', authLimiter, validate(loginSchema), asyncHandler(authController.login));
 
 authRoutes.get('/me', requireAuth, asyncHandler(authController.me));
+
+authRoutes.patch(
+  '/me',
+  requireAuth,
+  validate(updateProfileSchema),
+  asyncHandler(authController.updateProfile),
+);
+
+// Both of these take a password in the body, so they sit behind the same
+// rate limiter as sign-in rather than the general one.
+authRoutes.post(
+  '/change-password',
+  requireAuth,
+  authLimiter,
+  validate(changePasswordSchema),
+  asyncHandler(authController.changePassword),
+);
+
+authRoutes.delete(
+  '/me',
+  requireAuth,
+  authLimiter,
+  validate(deleteAccountSchema),
+  asyncHandler(authController.deleteAccount),
+);
 
 authRoutes.post('/logout', asyncHandler(authController.logout));

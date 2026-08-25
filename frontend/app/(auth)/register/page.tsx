@@ -39,8 +39,10 @@ export default function RegisterPage() {
 
   return (
     <div>
-      <h1 className="font-display text-[32px] leading-tight text-ink">Create your account</h1>
-      <p className="mt-1 text-sm text-ink-2">Book appointments by chat or by form.</p>
+      <h1 className="font-display text-[34px] leading-[1.1] text-ink sm:text-[40px]">
+        Create your account
+      </h1>
+      <p className="mt-2 text-sm text-ink-2">Book appointments by chat or by form.</p>
 
       <form onSubmit={onSubmit} noValidate className="mt-7 space-y-4">
         {registerUser.isError && (
@@ -53,7 +55,7 @@ export default function RegisterPage() {
           <Input
             id="name"
             autoComplete="name"
-            placeholder="Alex Morgan"
+            placeholder="e.g., Alex Morgan"
             invalid={Boolean(errors.name)}
             {...register('name')}
           />
@@ -64,35 +66,36 @@ export default function RegisterPage() {
             id="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder="e.g., you@example.com"
             invalid={Boolean(errors.email)}
             {...register('email')}
           />
         </Field>
 
-        <Field
-          label="Password"
-          htmlFor="password"
-          error={errors.password?.message}
-          hint="At least 8 characters, with an uppercase letter and a number."
-        >
+        <Field label="Password" htmlFor="password" error={errors.password?.message}>
           <Input
             id="password"
             type="password"
             autoComplete="new-password"
+            placeholder="At least 8 characters, with an uppercase and a number"
             invalid={Boolean(errors.password)}
             {...register('password')}
           />
         </Field>
 
-        <Button type="submit" size="lg" loading={registerUser.isPending} className="w-full">
+        <Button
+          type="submit"
+          size="lg"
+          loading={registerUser.isPending}
+          className="mt-2 h-11 w-full"
+        >
           Create account
         </Button>
       </form>
 
-      <p className="mt-6 text-[13px] text-ink-2">
+      <p className="mt-5 text-center text-[13px] text-ink-2">
         Already have an account?{' '}
-        <Link href="/login" className="font-medium text-accent hover:underline">
+        <Link href="/login" className="font-semibold text-ink underline-offset-4 hover:underline">
           Sign in
         </Link>
       </p>

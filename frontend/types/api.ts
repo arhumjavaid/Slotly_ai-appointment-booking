@@ -8,6 +8,9 @@ export interface User {
   name: string;
   email: string;
   createdAt: string;
+  /** Booking preferences, applied when a request does not state its own. */
+  timezone: string;
+  defaultDurationMinutes: number;
 }
 
 export interface Appointment {
