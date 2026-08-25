@@ -6,7 +6,20 @@
  * translation and the base URL in one auditable spot.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+/**
+ * Where API calls go.
+ *
+ * In production this is empty by design: requests become same-origin `/api/*`
+ * and the rewrite in next.config.ts forwards them to the backend. That keeps the
+ * HttpOnly session cookie first-party, which a direct cross-site call to a
+ * separate API domain cannot do once third-party cookies are blocked.
+ *
+ * Local development talks to the backend on its own port, which is same-site.
+ * NEXT_PUBLIC_API_URL overrides both if the API is ever addressed directly.
+ */
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export interface ApiErrorDetail {
   field: string;
