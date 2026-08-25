@@ -174,11 +174,16 @@ cp .env.example backend/.env
 Fill in `backend/.env`:
 
 ```env
-DATABASE_URL=postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres
 JWT_SECRET=<openssl rand -base64 48>
 MISTRAL_API_KEY=<your key>
 FRONTEND_URL=http://localhost:3000
 ```
+
+Use the **session pooler** string, not the direct one. Supabase's direct host
+(`db.<ref>.supabase.co`) resolves to IPv6 only, so on an IPv4-only network it
+fails with a misleading "Can't reach database server". Full explanation in
+[Supabase connection strings](#supabase-connection-strings) below.
 
 `JWT_SECRET` must be at least 32 characters — the server refuses to start
 otherwise, rather than falling back to a weak default.
@@ -191,10 +196,45 @@ echo 'NEXT_PUBLIC_API_URL=http://localhost:4000' > frontend/.env.local
 
 ### 3. Create the schema and seed it
 
+Apply the SQL migration, then seed:
+
 ```bash
-npm run db:migrate --workspace=backend   # or db:push for a throwaway database
-npm run db:seed --workspace=backend
+cd backend
+npx prisma db execute --schema prisma/schema.prisma \
+  --file ../database/migrations/001_initial_schema.sql
+npm run db:seed
 ```
+
+`--schema` makes Prisma read `DATABASE_URL` from `backend/.env`, so there is
+nothing to export first.
+
+The seed is idempotent — re-run it any time to reset the demo data.
+
+<details>
+<summary>Why not <code>prisma migrate dev</code>?</summary>
+
+The schema is versioned as reviewable SQL in `database/migrations/`, and
+`prisma db execute` applies it directly. `prisma migrate dev` would need a
+**shadow database** it creates and drops itself, which a managed Supabase role
+generally cannot do; and against a database that already has these tables but no
+`_prisma_migrations` history, it detects drift and offers to **reset** — which
+would drop your data.
+
+To adopt Prisma's migration history instead, baseline it once on an empty
+database:
+
+```bash
+npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma \
+  --script > prisma/migrations/0_init/migration.sql
+npx prisma migrate resolve --applied 0_init
+```
+
+After that `npm run db:deploy` (`prisma migrate deploy`) works, needs no shadow
+database, and is the right command for CI and production.
+
+`npm run db:push` is the third option — no migration files at all. Good for a
+throwaway database, not for one whose history you care about.
+</details>
 
 ### 4. Run
 
@@ -237,10 +277,11 @@ seed is the one to prefer — it hashes passwords at the configured cost and dat
 appointments relative to today, so the "upcoming" view is never empty.
 
 To apply the SQL migration directly against Supabase without `psql` installed,
-Prisma can run the file for you:
+Prisma can run the file for you — from `backend/`, reading the connection string
+from `.env`:
 
 ```bash
-npx prisma db execute --url "$DATABASE_URL" \
+npx prisma db execute --schema prisma/schema.prisma \
   --file ../database/migrations/001_initial_schema.sql
 ```
 
