@@ -1,0 +1,20 @@
+{# Appended to the final user turn to keep long conversations on-format.
+
+   Note the tense: `missing_fields` describes the draft as it stood *before*
+   this message was read. If the message supplies the rest, the booking is
+   complete and the model must summarise rather than keep asking. Without that
+   framing the reminder contradicts the system prompt on the turn where the
+   user provides everything at once. #}
+Reply with the JSON object described in the system message and nothing else.
+
+Remember:
+  - Today is {{ now.weekday }}, {{ now.currentDate }} ({{ now.timezone }}).
+  - Carry forward every detail already collected.
+  - Use null for anything the user has not actually told you.
+  - Never ask about duration. It defaults to {{ default_duration }} minutes.
+{% if missing_fields %}  - Before reading this message, still unknown: {{ missing_fields | join(", ") }}.
+    If this message supplies the rest, do not ask anything further — summarise
+    the appointment and ask the user to confirm it.
+{% endif -%}
+{% if ready_to_confirm %}  - Every required detail is known. Summarise the appointment and ask the user to confirm it.
+{% endif -%}

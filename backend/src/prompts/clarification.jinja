@@ -1,0 +1,19 @@
+{# Deterministic fallback copy, rendered server-side when the model cannot be
+   used or returned something we refuse to trust. The user always gets a
+   sensible next step even with the AI completely unavailable. #}
+{% if reason == "ai_unavailable" -%}
+AI booking is temporarily unavailable, so I can't take this by chat right now.
+You can still book in a few seconds using the manual form.
+{% elif reason == "invalid_output" -%}
+Sorry — I didn't quite follow that. Could you rephrase it, or switch to the
+manual form if that's quicker?
+{% elif reason == "too_many_attempts" -%}
+I'm still not sure I've understood what you need. The manual form will get this
+booked in a few seconds.
+{% else -%}
+{% if missing_fields -%}
+I still need {{ missing_fields | join(" and ") }} before I can book this.
+{% else -%}
+Could you give me a little more detail about the appointment you'd like?
+{% endif -%}
+{% endif -%}

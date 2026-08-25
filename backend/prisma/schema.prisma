@@ -1,0 +1,135 @@
+// Prisma schema for the AI Appointment Booking MVP.
+//
+// Design notes:
+// - `startsAt` / `endsAt` are stored as UTC instants (timestamptz). The IANA
+//   timezone the appointment was booked in is kept alongside so the original
+//   local wall-clock time can always be reproduced. Both the manual form and
+//   the AI flow converge on the same conversion in the appointment service.
+// - Chat draft state lives on the session (server-side), never on the client.
+//   The AI proposes a draft; only the backend may promote it to an appointment.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum AppointmentSource {
+  MANUAL
+  AI
+}
+
+enum ChatSessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  appointments   Appointment[]
+  chatSessions   ChatSession[]
+  aiInteractions AiInteraction[]
+
+  @@map("users")
+}
+
+model Appointment {
+  id              String            @id @default(uuid()) @db.Uuid
+  userId          String            @map("user_id") @db.Uuid
+  appointmentType String            @map("appointment_type") @db.VarChar(120)
+  startsAt        DateTime          @map("starts_at") @db.Timestamptz(6)
+  endsAt          DateTime          @map("ends_at") @db.Timestamptz(6)
+  durationMinutes Int               @map("duration_minutes")
+  timezone        String            @default("UTC") @db.VarChar(64)
+  notes           String?           @db.VarChar(1000)
+  status          AppointmentStatus @default(CONFIRMED)
+  source          AppointmentSource @default(MANUAL)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startsAt])
+  @@index([userId, status])
+  @@index([startsAt])
+  @@map("appointments")
+}
+
+model ChatSession {
+  id        String            @id @default(uuid()) @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  status    ChatSessionStatus @default(ACTIVE)
+  // Server-held appointment draft accumulated across turns. The AI can only
+  // ever propose values here; promotion to a real appointment is a backend
+  // decision made against the validated draft.
+  draft     Json?
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       ChatMessage[]
+  aiInteractions AiInteraction[]
+
+  @@index([userId, updatedAt])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  role      ChatRole
+  content   String   @db.Text
+  // Validated structured output attached to assistant turns, so the summary
+  // card can be re-rendered when the conversation is reloaded.
+  structured Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+model AiInteraction {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionId    String?  @map("session_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  model        String   @db.VarChar(80)
+  // Non-sensitive request/response metadata only (template name, turn count,
+  // token usage, finish reason). Raw prompts and user content are never stored.
+  requestMeta  Json?    @map("request_meta")
+  responseMeta Json?    @map("response_meta")
+  latencyMs    Int      @map("latency_ms")
+  success      Boolean  @default(true)
+  errorCode    String?  @map("error_code") @db.VarChar(64)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session ChatSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt])
+  @@index([createdAt])
+  @@map("ai_interactions")
+}

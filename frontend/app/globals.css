@@ -1,0 +1,106 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens.
+ *
+ * A cool neutral scale carries the whole interface; the accent appears only on
+ * primary actions and the time rail, so the eye always knows where the next
+ * step is. Status colours are reserved for appointment state and nothing else.
+ */
+@theme {
+  --color-ink: #131519;
+  --color-ink-2: #4a5060;
+  --color-ink-3: #7b8296;
+  --color-line: #e4e7ee;
+  --color-line-strong: #cdd3de;
+  --color-paper: #f5f6f9;
+  --color-surface: #ffffff;
+
+  --color-accent: #2f4bd8;
+  --color-accent-hover: #2540bd;
+  --color-accent-soft: #eef1fe;
+
+  --color-ok: #1a7a4c;
+  --color-ok-soft: #e8f5ee;
+  --color-warn: #a86a12;
+  --color-warn-soft: #fdf3e3;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdeceb;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), Georgia, serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  --radius-card: 12px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Keyboard focus is always visible; pointer focus is not. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+
+  /* Times are data: lining, tabular figures so columns of times align. */
+  .tnum {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Assistant "thinking" indicator. */
+@keyframes pulse-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.dot-1 { animation: pulse-dot 1.2s infinite; }
+.dot-2 { animation: pulse-dot 1.2s infinite 0.15s; }
+.dot-3 { animation: pulse-dot 1.2s infinite 0.3s; }
