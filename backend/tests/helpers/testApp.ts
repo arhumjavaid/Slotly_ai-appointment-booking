@@ -2,14 +2,55 @@ import request from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/prisma';
+import { SERVICE_CATALOGUE, toAvailabilityRows } from '../../src/config/serviceCatalogue';
+import { timeToDbTime } from '../../src/utils/time';
 
 export const app: Express = createApp();
 export const api = () => request(app);
 
-/** Wipes all rows between tests. Cascades handle the dependent tables. */
+/**
+ * Loads the service catalogue.
+ *
+ * Deliberately not part of `resetDatabase`: services are shared reference data
+ * rather than per-test rows, so they are seeded once per suite and survive the
+ * truncation between tests.
+ */
+export async function seedServiceCatalogue(): Promise<void> {
+  for (const service of SERVICE_CATALOGUE) {
+    const record = await prisma.serviceType.upsert({
+      where: { slug: service.slug },
+      update: { name: service.name, defaultDurationMinutes: service.defaultDurationMinutes },
+      create: {
+        name: service.name,
+        slug: service.slug,
+        defaultDurationMinutes: service.defaultDurationMinutes,
+      },
+    });
+
+    await prisma.availabilityRule.deleteMany({ where: { serviceTypeId: record.id } });
+    await prisma.availabilityRule.createMany({
+      data: toAvailabilityRows(service).map((row) => ({
+        serviceTypeId: record.id,
+        weekday: row.weekday,
+        startsAt: timeToDbTime(row.startTime),
+        endsAt: timeToDbTime(row.endTime),
+      })),
+    });
+  }
+}
+
+/**
+ * Wipes all rows between tests. Cascades handle the dependent tables.
+ *
+ * The service catalogue is included, which means every suite starts with no
+ * services and therefore no opening hours to enforce — bookings behave exactly
+ * as they did before availability existed. Suites that want the rules call
+ * `seedServiceCatalogue()` themselves. Safe because `fileParallelism` is off,
+ * so no two suites share a database at the same moment.
+ */
 export async function resetDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE ai_interactions, chat_messages, chat_sessions, appointments, users RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE ai_interactions, chat_messages, chat_sessions, appointments, users, service_types RESTART IDENTITY CASCADE',
   );
 }
 

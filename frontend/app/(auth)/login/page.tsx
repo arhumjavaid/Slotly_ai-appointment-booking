@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,6 +18,9 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginPage() {
   const login = useLogin();
+  // Password reset has no backend yet, so the control says so rather than
+  // leading to a dead route.
+  const [resetUnavailable, setResetUnavailable] = useState(false);
 
   const {
     register,
@@ -62,6 +66,22 @@ export default function LoginPage() {
             {...register('password')}
           />
         </Field>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setResetUnavailable(true)}
+            className="text-[13px] font-medium text-navy underline-offset-4 hover:underline"
+          >
+            Forgot password?
+          </button>
+        </div>
+
+        {resetUnavailable && (
+          <Alert tone="info">
+            Password reset isn&apos;t available yet. Create a new account if you cannot get in.
+          </Alert>
+        )}
 
         <Button
           type="submit"

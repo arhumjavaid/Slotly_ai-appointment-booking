@@ -14,6 +14,7 @@ export const AI_INTENTS = [
   'book_appointment',
   'confirm_appointment',
   'cancel_booking_flow',
+  'check_availability',
   'ask_question',
   'out_of_scope',
   'unclear',

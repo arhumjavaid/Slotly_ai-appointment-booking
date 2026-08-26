@@ -1,5 +1,7 @@
 import { PrismaClient, type Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { SERVICE_CATALOGUE, toAvailabilityRows } from '../src/config/serviceCatalogue';
+import { timeToDbTime } from '../src/utils/time';
 
 /**
  * Development seed.
@@ -34,10 +36,47 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Upserts the bookable services and replaces their opening hours.
+ *
+ * Rules are deleted and re-inserted rather than diffed: they are small,
+ * wholly derived from the catalogue, and a partial update would leave stale
+ * windows behind when a service's hours change.
+ */
+async function seedServiceCatalogue(): Promise<void> {
+  for (const service of SERVICE_CATALOGUE) {
+    const record = await prisma.serviceType.upsert({
+      where: { slug: service.slug },
+      update: {
+        name: service.name,
+        defaultDurationMinutes: service.defaultDurationMinutes,
+        active: true,
+      },
+      create: {
+        name: service.name,
+        slug: service.slug,
+        defaultDurationMinutes: service.defaultDurationMinutes,
+      },
+    });
+
+    await prisma.availabilityRule.deleteMany({ where: { serviceTypeId: record.id } });
+    await prisma.availabilityRule.createMany({
+      data: toAvailabilityRows(service).map((row) => ({
+        serviceTypeId: record.id,
+        weekday: row.weekday,
+        startsAt: timeToDbTime(row.startTime),
+        endsAt: timeToDbTime(row.endTime),
+      })),
+    });
+  }
+}
+
 async function main(): Promise<void> {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Refusing to seed a production database');
   }
+
+  await seedServiceCatalogue();
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
@@ -207,7 +246,8 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `Seeded ${appointments.length} appointments across 2 demo accounts.\n` +
+    `Seeded ${SERVICE_CATALOGUE.length} services with opening hours.\n` +
+      `Seeded ${appointments.length} appointments across 2 demo accounts.\n` +
       `  demo@slotly.test / ${DEMO_PASSWORD}\n` +
       `  sam@slotly.test  / ${DEMO_PASSWORD}`,
   );

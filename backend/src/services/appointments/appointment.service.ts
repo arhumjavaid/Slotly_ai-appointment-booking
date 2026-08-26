@@ -4,6 +4,7 @@ import { ErrorCode, ApiError } from '../../utils/apiError';
 import { addMinutes, utcToZonedParts, zonedTimeToUtc } from '../../utils/time';
 import { appointmentRepository } from '../../repositories/appointment.repository';
 import { userRepository } from '../../repositories/user.repository';
+import { availabilityService } from '../availability/availability.service';
 import type {
   CreateAppointmentInput,
   ListAppointmentsQuery,
@@ -114,6 +115,14 @@ export const appointmentService = {
       ]);
     }
 
+    // Opening hours before personal clashes: "we are closed then" is the more
+    // useful thing to hear first, and it is true regardless of the calendar.
+    await availabilityService.assertWithinAvailability(
+      input.appointmentType,
+      startsAt,
+      endsAt,
+      timezone,
+    );
     await assertSlotIsFree(userId, startsAt, endsAt);
 
     const created = await appointmentRepository.create({
@@ -202,6 +211,14 @@ export const appointmentService = {
       }
 
       if (nextStatus !== 'CANCELLED') {
+        // Rescheduling has to clear the same bar as booking, or PATCH becomes
+        // a way around opening hours.
+        await availabilityService.assertWithinAvailability(
+          input.appointmentType ?? existing.appointmentType,
+          startsAt,
+          endsAt,
+          timezone,
+        );
         await assertSlotIsFree(userId, startsAt, endsAt, id);
       }
 

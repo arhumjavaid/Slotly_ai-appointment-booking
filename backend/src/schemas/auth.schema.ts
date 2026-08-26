@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { durationSchema, timezoneSchema } from './common.schema';
+import { durationSchema } from './common.schema';
 
 const nameSchema = z.string().trim().min(2, 'Name must be at least 2 characters').max(120);
 const emailSchema = z.string().trim().toLowerCase().email('Enter a valid email address').max(255);
@@ -33,7 +33,6 @@ export const registerSchema = z.object({
 export const updateProfileSchema = z
   .object({
     name: nameSchema.optional(),
-    timezone: timezoneSchema.optional(),
     defaultDurationMinutes: durationSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, 'Provide at least one field to update');

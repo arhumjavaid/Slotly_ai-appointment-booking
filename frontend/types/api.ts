@@ -54,11 +54,24 @@ export type UpdateAppointmentPayload = Partial<CreateAppointmentPayload> & {
   status?: AppointmentStatus;
 };
 
+/** One service's hours as the assistant reports them. */
+export interface AvailabilitySummary {
+  name: string;
+  defaultDurationMinutes: number;
+  /** One entry per run of days: "Mon-Fri 09:00-12:00 and 14:00-18:00". */
+  hours: string[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'USER' | 'ASSISTANT';
   content: string;
   createdAt: string;
+  /**
+   * The turn's validated model output, plus anything the server attached.
+   * `unknown` because it is stored as free-form JSON — read it through a
+   * narrowing helper rather than casting.
+   */
   structured: unknown;
 }
 
@@ -91,4 +104,24 @@ export interface ChatTurnResult {
   aiAvailable: boolean;
   appointment: Appointment | null;
   sessionStatus: 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
+}
+
+export interface AvailabilityWindow {
+  startTime: string;
+  endTime: string;
+}
+
+export interface DayAvailability {
+  weekday: number;
+  /** Empty means closed that day. */
+  windows: AvailabilityWindow[];
+}
+
+export interface ServiceType {
+  id: string;
+  name: string;
+  slug: string;
+  defaultDurationMinutes: number;
+  /** Always seven entries, Sunday first. */
+  days: DayAvailability[];
 }

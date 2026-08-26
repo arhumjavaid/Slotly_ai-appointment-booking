@@ -11,6 +11,7 @@ import type { User } from '@/types/api';
 const NAV = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/appointments', label: 'Appointments' },
+  { href: '/availability', label: 'Availability' },
   { href: '/settings', label: 'Settings' },
 ];
 

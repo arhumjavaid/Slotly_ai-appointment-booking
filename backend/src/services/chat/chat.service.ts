@@ -13,6 +13,8 @@ import { createAppointmentSchema } from '../../schemas/appointment.schema';
 import { AiService, aiService as defaultAiService } from '../ai/ai.service';
 import type { ChatTurn } from '../ai/provider.types';
 import { appointmentService, type AppointmentView } from '../appointments/appointment.service';
+import { availabilityService } from '../availability/availability.service';
+import { addMinutes, zonedTimeToUtc } from '../../utils/time';
 
 const DEFAULT_DURATION_MINUTES = 30;
 const HISTORY_LIMIT = 24;
@@ -210,6 +212,9 @@ export class ChatService {
         // Keeps the duration the assistant quotes in its summary the same as
         // the one the booking will actually use.
         defaultDurationMinutes: user?.defaultDurationMinutes,
+        // Injected as fact so the model reads hours rather than inventing them.
+        // Whatever it still gets wrong is caught below, after it has spoken.
+        servicesText: await availabilityService.describeCatalogue(),
         sessionId,
         userId,
       });
@@ -220,11 +225,95 @@ export class ChatService {
     }
 
     draft = mergeDraft(draft, extraction.appointment);
-    const missingAfter = missingFieldsOf(draft);
-    const readyToConfirm = missingAfter.length === 0;
+    let missingAfter = missingFieldsOf(draft);
+    let readyToConfirm = missingAfter.length === 0;
 
     let appointment: AppointmentView | null = null;
     let replyText = extraction.reply;
+
+    // The model has had its say; now the server checks it against the hours.
+    // A time outside them is dropped from the draft and the model's reply is
+    // replaced, so a hallucinated "yes, 1 PM works" never reaches the user.
+    const unavailable = await this.checkAvailability(draft, user?.defaultDurationMinutes);
+    if (unavailable) {
+      // Drop whichever half of the request cannot stand, and keep the other.
+      // A closed day invalidates the date — no time on it would work — so
+      // holding on to it would leave the summary panel showing a date the
+      // assistant has just refused. A time outside that day's windows
+      // invalidates only the time, and the date is still worth keeping.
+      draft =
+        unavailable.field === 'date'
+          ? { ...draft, date: null }
+          : { ...draft, startTime: null };
+      missingAfter = missingFieldsOf(draft);
+      readyToConfirm = false;
+      replyText = unavailable.message;
+
+      await chatRepository.updateDraft(sessionId, draft as never);
+      const rejection = await chatRepository.addMessage(sessionId, 'ASSISTANT', replyText, {
+        intent: extraction.intent,
+        draft: draft as never,
+        missingFields: missingAfter,
+        readyToConfirm: false,
+        availabilityRejected: true,
+        appointmentId: null,
+      } as never);
+
+      return {
+        message: toMessageView(rejection),
+        draft: toDraftView(draft, tz),
+        missingFields: missingAfter,
+        readyToConfirm: false,
+        suggestManual: false,
+        aiAvailable: true,
+        appointment: null,
+        sessionStatus: 'ACTIVE',
+      };
+    }
+
+    // "What's available?" is answered from the database, not from the model.
+    // It supplies the lead-in sentence; the list itself is built here and
+    // carried as structured data so the UI can lay it out properly.
+    if (extraction.intent === 'check_availability') {
+      // What the user actually typed is the reliable signal here. The model
+      // leaves `appointmentType` null when the user is asking rather than
+      // booking — correctly so — which would otherwise widen "haircut hours?"
+      // into the whole catalogue. The draft is the last resort, for when the
+      // question arrives mid-booking as a bare "what are your hours?".
+      const named =
+        (await availabilityService.matchService(content)) ??
+        (await availabilityService.matchService(
+          extraction.appointment.appointmentType ?? draft.appointmentType ?? '',
+        ));
+      const summary = await availabilityService.summariseAvailability(named?.slug ?? null);
+
+      const message = await chatRepository.addMessage(
+        sessionId,
+        'ASSISTANT',
+        `${replyText}\n\n${summary.text}`,
+        {
+          intent: extraction.intent,
+          availability: summary.services,
+          draft: draft as never,
+          missingFields: missingAfter,
+          readyToConfirm,
+          appointmentId: null,
+        } as never,
+      );
+
+      await chatRepository.updateDraft(sessionId, draft as never);
+
+      return {
+        message: toMessageView(message),
+        draft: toDraftView(draft, tz),
+        missingFields: missingAfter,
+        readyToConfirm,
+        suggestManual: false,
+        aiAvailable: true,
+        appointment: null,
+        sessionStatus: 'ACTIVE',
+      };
+    }
 
     if (extraction.intent === 'confirm_appointment' && readyToConfirm) {
       appointment = await this.promoteDraft(userId, sessionId, draft);
@@ -288,6 +377,51 @@ export class ChatService {
     }
 
     return this.promoteDraft(userId, sessionId, draft);
+  }
+
+  /**
+   * Describes why the draft falls outside its service's hours, or null when
+   * there is nothing to object to.
+   *
+   * Deliberately reuses the same `assertWithinAvailability` the booking path
+   * calls, so the conversation cannot be told one thing while the database
+   * enforces another. The rejection is a normal turn in the conversation here
+   * rather than a failed request, so only the error's message and the field it
+   * blames are borrowed.
+   */
+  private async checkAvailability(
+    draft: StoredDraft,
+    defaultDurationMinutes?: number,
+  ): Promise<{ message: string; field: string } | null> {
+    if (!draft.appointmentType || !draft.date) return null;
+
+    const timezone = draft.timezone ?? env.DEFAULT_TIMEZONE;
+
+    try {
+      if (!draft.startTime) {
+        // No time yet, but "closed all day" is already decidable — and has to
+        // be caught now, or the assistant asks "what time on Sunday?" about a
+        // day where no answer would be accepted.
+        await availabilityService.assertDayIsOpen(draft.appointmentType, draft.date);
+        return null;
+      }
+
+      const duration = draft.durationMinutes ?? defaultDurationMinutes ?? DEFAULT_DURATION_MINUTES;
+      const startsAt = zonedTimeToUtc(draft.date, draft.startTime, timezone);
+
+      await availabilityService.assertWithinAvailability(
+        draft.appointmentType,
+        startsAt,
+        addMinutes(startsAt, duration),
+        timezone,
+      );
+      return null;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === ErrorCode.OUTSIDE_AVAILABILITY) {
+        return { message: error.message, field: error.details?.[0]?.field ?? 'startTime' };
+      }
+      throw error;
+    }
   }
 
   /**

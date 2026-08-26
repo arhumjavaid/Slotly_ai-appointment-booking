@@ -103,14 +103,14 @@ model ChatSession {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid()) @db.Uuid
-  sessionId String   @map("session_id") @db.Uuid
-  role      ChatRole
-  content   String   @db.Text
+  id         String   @id @default(uuid()) @db.Uuid
+  sessionId  String   @map("session_id") @db.Uuid
+  role       ChatRole
+  content    String   @db.Text
   // Validated structured output attached to assistant turns, so the summary
   // card can be re-rendered when the conversation is reloaded.
   structured Json?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -138,4 +138,51 @@ model AiInteraction {
   @@index([sessionId, createdAt])
   @@index([createdAt])
   @@map("ai_interactions")
+}
+
+/// A bookable service. The catalogue the assistant and the booking screen both
+/// read from; `slug` is the stable identity that user phrasing is matched
+/// against, so `name` stays free to be re-worded.
+model ServiceType {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Tenancy anchor. Unused while the app is single-tenant, kept nullable so
+  /// the catalogue can later be partitioned per business.
+  businessId String? @map("business_id") @db.Uuid
+
+  name                   String   @db.VarChar(120)
+  slug                   String   @unique @db.VarChar(120)
+  defaultDurationMinutes Int      @default(30) @map("default_duration_minutes")
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  availabilityRules AvailabilityRule[]
+
+  @@index([active])
+  @@map("service_types")
+}
+
+/// One open window on one weekday. Windows are open hours, never breaks: a
+/// service working 09:00-12:00 and 14:00-18:00 has two rows for that weekday
+/// and the break is the gap between them. A closed day has no rows at all.
+///
+/// Times are wall-clock, not instants — opening hours repeat weekly and do not
+/// shift with the calendar. The availability service resolves them against a
+/// concrete date at check time.
+model AvailabilityRule {
+  id            String @id @default(uuid()) @db.Uuid
+  serviceTypeId String @map("service_type_id") @db.Uuid
+
+  /// 0 = Sunday .. 6 = Saturday, matching JavaScript's getDay().
+  weekday   Int      @db.SmallInt
+  startsAt  DateTime @map("starts_at") @db.Time(6)
+  endsAt    DateTime @map("ends_at") @db.Time(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  serviceType ServiceType @relation(fields: [serviceTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceTypeId, weekday, startsAt])
+  @@index([serviceTypeId, weekday])
+  @@map("availability_rules")
 }

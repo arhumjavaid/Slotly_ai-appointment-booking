@@ -28,6 +28,11 @@ export interface ExtractionContext {
   timezone: string;
   /** The account's default appointment length; falls back to the app default. */
   defaultDurationMinutes?: number;
+  /**
+   * Pre-rendered catalogue of services and opening hours, injected as fact.
+   * Supplied by the caller so this service stays free of database access.
+   */
+  servicesText?: string;
   sessionId?: string;
   userId?: string;
 }
@@ -79,6 +84,7 @@ export class AiService {
       default_duration: defaultDuration,
       now,
       draft: context.draft,
+      services_text: context.servicesText ?? '',
     });
 
     const reminder = renderPrompt('appointment_extraction.jinja', {

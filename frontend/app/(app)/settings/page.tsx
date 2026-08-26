@@ -112,30 +112,12 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
 }
 
 const preferencesSchema = z.object({
-  timezone: z.string().trim().min(1, 'Choose a timezone'),
   defaultDurationMinutes: z.coerce.number().int().min(15).max(480),
 });
 
-function PreferencesSection({
-  timezone,
-  defaultDurationMinutes,
-}: {
-  timezone: string;
-  defaultDurationMinutes: number;
-}) {
+function PreferencesSection({ defaultDurationMinutes }: { defaultDurationMinutes: number }) {
   const updateProfile = useUpdateProfile();
   const [saved, markSaved] = useTransientFlag();
-
-  // Whatever the browser reports, plus whatever is already saved — so the
-  // current value is always selectable even from a different machine.
-  const [zones] = useState(() => {
-    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const supported =
-      typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
-    return [...new Set([detected, timezone, ...supported])].filter(Boolean).sort();
-  });
-
-  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const {
     register,
@@ -144,21 +126,15 @@ function PreferencesSection({
     formState: { errors, isDirty },
   } = useForm<z.input<typeof preferencesSchema>>({
     resolver: zodResolver(preferencesSchema),
-    values: { timezone, defaultDurationMinutes },
+    values: { defaultDurationMinutes },
   });
 
   const onSubmit = handleSubmit((values) =>
     updateProfile.mutate(
-      {
-        timezone: values.timezone,
-        defaultDurationMinutes: Number(values.defaultDurationMinutes),
-      },
+      { defaultDurationMinutes: Number(values.defaultDurationMinutes) },
       {
         onSuccess: (result) => {
-          reset({
-            timezone: result.user.timezone,
-            defaultDurationMinutes: result.user.defaultDurationMinutes,
-          });
+          reset({ defaultDurationMinutes: result.user.defaultDurationMinutes });
           markSaved();
         },
       },
@@ -177,21 +153,6 @@ function PreferencesSection({
           </Alert>
         )}
         {saved && !updateProfile.isError && <Alert tone="success">Preferences saved.</Alert>}
-
-        <Field
-          label="Timezone"
-          htmlFor="timezone"
-          error={errors.timezone?.message}
-          hint={`Appointment times are stored and shown in this zone. This device reports ${detected}.`}
-        >
-          <Select id="timezone" invalid={Boolean(errors.timezone)} {...register('timezone')}>
-            {zones.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone}
-              </option>
-            ))}
-          </Select>
-        </Field>
 
         <Field
           label="Default appointment length"
@@ -433,10 +394,7 @@ export default function SettingsPage() {
       </div>
 
       <ProfileSection name={user.name} email={user.email} />
-      <PreferencesSection
-        timezone={user.timezone}
-        defaultDurationMinutes={user.defaultDurationMinutes}
-      />
+      <PreferencesSection defaultDurationMinutes={user.defaultDurationMinutes} />
       <PasswordSection />
       <DangerSection email={user.email} />
     </div>

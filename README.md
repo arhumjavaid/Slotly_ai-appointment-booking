@@ -16,6 +16,7 @@ The AI helps a user *express* a booking. It never performs one.
 - [Tech stack](#tech-stack)
 - [Local setup](#local-setup)
 - [Database setup](#database-setup)
+- [Availability](#availability)
 - [AI setup](#ai-setup)
 - [API overview](#api-overview)
 - [Security decisions](#security-decisions)
@@ -73,6 +74,7 @@ flowchart TD
         MW["Middleware: helmet · CORS · rate limit · auth · Zod validation"]
         Controllers["Controllers (thin)"]
         AppSvc["Appointment service — all scheduling rules"]
+        AvailSvc["Availability service — opening hours"]
         ChatSvc["Chat service — conversation + draft state"]
         AISvc["AI service — prompts, parsing, validation"]
         Repos["Repositories — user-scoped Prisma queries"]
@@ -89,6 +91,9 @@ flowchart TD
     AISvc -. "prompt / structured output" .-> Mistral
     AISvc -- "validated draft" --> ChatSvc
     ChatSvc -- "confirmed booking" --> AppSvc
+    ChatSvc -- "hours as prompt facts" --> AvailSvc
+    AppSvc -- "is it open then?" --> AvailSvc
+    AvailSvc --> Repos
     AppSvc --> Repos --> DB
 
     style Mistral stroke-dasharray: 5 5
@@ -108,9 +113,10 @@ User message
   → structured JSON output  (untrusted)
   → Zod validation          (strict; rejected output is retried once, then dropped)
   → server-held draft       (merged on the server, never on the client)
+  → availability check      (a closed time is dropped and the reply replaced)
   → user confirms
   → Zod validation again    (the same schema the manual form uses)
-  → appointment service     (past-date and overlap rules)
+  → appointment service     (past-date, opening-hours and overlap rules)
   → Prisma
   → PostgreSQL
 ```
@@ -120,7 +126,7 @@ validated by `createAppointmentSchema` and executed by
 `appointmentService.create`, so a scheduling rule cannot exist in one flow and
 not the other. There is no second code path to keep in sync.
 
-Three specific consequences worth pointing out:
+Four specific consequences worth pointing out:
 
 1. **The draft lives on the server** (`chat_sessions.draft`). The client cannot
    submit a doctored draft, and a model that "forgets" a detail on turn three
@@ -128,7 +134,12 @@ Three specific consequences worth pointing out:
 2. **The server's view wins.** If the model claims the user confirmed but the
    draft is still incomplete, the booking does not happen — the assistant asks
    for the missing detail instead. This is covered by a test.
-3. **Structured output is validated, not repaired.** Formatting the model gets
+3. **Opening hours are checked after the model speaks, not by it.** The
+   catalogue is injected into the prompt so the assistant behaves well, but
+   `appointmentService.create` is what enforces it — and when the model
+   proposes a closed time anyway, the chat service replaces its reply with the
+   real hours before the user ever sees it. Also covered by a test.
+4. **Structured output is validated, not repaired.** Formatting the model gets
    wrong (`3pm`, `"null"`, snake_case keys) is normalised. Facts it gets wrong
    (`"next tuesday"` as a date, a 1000-minute duration) are rejected, so the
    assistant asks again rather than booking a guess.
@@ -328,6 +339,57 @@ Row Level Security are deliberately not used — see the tradeoffs below.
 | `chat_sessions` | One conversation, with the server-held booking `draft`. |
 | `chat_messages` | Transcript. Assistant turns carry their validated structured output. |
 | `ai_interactions` | Model call telemetry: latency, tokens, outcome. Metadata only. |
+| `service_types` | The bookable services. `business_id` is a nullable tenancy anchor. |
+| `availability_rules` | One open window per weekday per service. A closed day has no rows. |
+
+---
+
+## Availability
+
+Each service has weekly opening hours, shown read-only on the **Availability**
+tab and enforced on every booking.
+
+Rules describe **open windows, never breaks**. A doctor working 09:00-12:00 and
+14:00-18:00 is two rows for that weekday, and the two-hour break is simply the
+gap between them. A weekday with no rows is closed. An appointment must fit
+entirely inside a single window — that is what gives the break meaning, and it
+removes any need for a separate "breaks" table or special-case logic.
+
+Hours are seeded, not editable in the app: business-owner configuration is out
+of scope here. The catalogue lives in `backend/src/config/serviceCatalogue.ts`
+so the SQL seed, the TypeScript seed and the test fixtures cannot drift apart.
+
+**Matching is permissive.** An appointment type is matched to a service by
+name — exact, or as a word inside a longer phrase ("dentist appointment"), or
+as an abbreviation prefixing the slug ("physio"). A type that matches nothing
+books exactly as it did before this feature existed. The catalogue is a source
+of rules, not a whitelist; making it one is a product decision this prototype
+has not taken, and `appointments` deliberately has no `service_type_id` foreign
+key as a result.
+
+**Answering "what's available?"** is also the server's job. The model classifies
+the question as `check_availability` and writes a one-line lead-in; the list
+itself is built from the database and attached to the turn as structured data,
+which the transcript lays out as a heading and hours per service. The model
+never writes the times out, so they cannot drift from the tab or the rules —
+and which service to narrow to is matched from the user's own words, because
+the model correctly leaves `appointmentType` null when the user is asking
+rather than booking.
+
+**The server decides, the assistant narrates.** The model is given the hours in
+its prompt so it behaves well, but it is never what enforces them:
+`availabilityService.assertWithinAvailability` runs inside
+`appointmentService.create`, which both the form and the conversation funnel
+through. When the model proposes a closed time anyway, the chat service
+**replaces the model's reply** with the real hours before it is persisted — so
+a hallucinated "yes, 1 PM works" never reaches the user — and drops whichever
+half of the request cannot stand. A closed day invalidates the *date*, because
+no time on it would work; a time outside that day's windows invalidates only
+the *time*. The closed-day half runs as soon as the service and date are
+known — waiting for a time would let the assistant ask "what time on Sunday?"
+about a day it is about to refuse. The rejection names the field at fault, so the assistant and the
+manual form discard the same thing. An AI-only guardrail would in any case be
+bypassable by posting to the form.
 
 ---
 
@@ -402,10 +464,10 @@ All responses share one envelope.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `POST` | `/api/appointments` | `201`. `409 APPOINTMENT_CONFLICT` on overlap, `400` for a past date. |
+| `POST` | `/api/appointments` | `201`. `409 APPOINTMENT_CONFLICT` on overlap, `409 OUTSIDE_AVAILABILITY` outside opening hours, `400` for a past date. |
 | `GET` | `/api/appointments` | `?scope=upcoming\|past\|all&status=&from=&to=&limit=&offset=` |
 | `GET` | `/api/appointments/:id` | `404` if it is not yours. |
-| `PATCH` | `/api/appointments/:id` | Reschedule, edit or change status. Re-checks overlaps. |
+| `PATCH` | `/api/appointments/:id` | Reschedule, edit or change status. Re-checks overlaps and opening hours. |
 | `DELETE` | `/api/appointments/:id` | `204`. |
 
 ### Chat
@@ -417,6 +479,12 @@ All responses share one envelope.
 | `GET` | `/api/chat/sessions/:id` | Transcript, draft, and what is missing. |
 | `POST` | `/api/chat/sessions/:id/messages` | One turn. Returns the reply, the updated draft, and any appointment created by an in-conversation confirmation. |
 | `POST` | `/api/chat/sessions/:id/confirm` | Promotes the server-held draft. This is what the summary card's button calls. |
+
+### Availability
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/api/availability` | Active services with a full week of opening hours. Read-only. |
 
 ### Health
 
@@ -522,6 +590,31 @@ own message and a typing indicator while the reply is in flight. Streaming
 tokens is the change that would actually improve this, and that is a natural
 next step — it needs SSE, not WebSockets.
 
+**Opening hours as open windows, not breaks.** A doctor working 09:00-12:00
+and 14:00-18:00 is two rows, and the break is the gap between them. Modelling
+breaks instead would mean storing both a span and its exclusions, then
+subtracting one from the other on every check. Storing what is *open* makes
+"does this booking fit?" a single containment test against one window, makes a
+closed day the absence of rows rather than a flag, and needs no special case
+anywhere. The cost is that a service open in two adjacent windows stores two
+rows where one span would do — which is exactly the information a reader wants
+to see anyway.
+
+**Availability is enforced permissively.** A type that matches no service is
+unconstrained. The alternative — a `NOT NULL service_type_id` foreign key —
+is the stricter model and the natural next step, but it turns every unmatched
+booking into an error, which is a product decision rather than a technical one.
+Keeping `appointment_type` as free text also preserves it as a *historical
+label*: renaming "Doctor" to "General Practitioner" must not rewrite what past
+users actually booked.
+
+**A single application timezone.** Per-user timezones were removed rather than
+kept: a booking product for one location has one clock, and carrying the
+concept through the settings screen, every client payload and the availability
+comparison cost more than it bought. The database columns remain and still
+store the zone each booking was made in, so reintroducing the choice is
+additive rather than a migration.
+
 **The AI is isolated behind a service.** `AiService` depends on an `AiProvider`
 interface; `MistralProvider` is the only implementation. Nothing outside that
 folder knows Mistral exists. That makes the provider swappable, and it makes
@@ -565,6 +658,8 @@ Indexes follow the queries the application actually issues.
 | `chat_messages(session_id, created_at)` | Loading a transcript in order, which is the only way it is ever read. |
 | `ai_interactions(session_id, created_at)` | Tracing the model calls behind one conversation. |
 | `ai_interactions(created_at)` | Time-ordered latency and error-rate reporting. |
+| `service_types(slug)` unique | Matching an appointment type to a service, and the uniqueness constraint itself. |
+| `availability_rules(service_type_id, weekday)` | The only way rules are ever read: "this service, this day". Equality on both columns. |
 
 Composite indexes lead with the equality column and end with the range column,
 so one index serves both the filter and the ordering. At MVP data volumes
@@ -606,8 +701,14 @@ What is covered:
   a code fence, a hallucinated date rejected, provider failure degrading to the
   form, telemetry recorded without message content, and the model's claimed
   confirmation being overridden when the server-side draft is incomplete.
+- **Availability** — the endpoint's shape, bookings accepted at a window's exact
+  open and close, a time inside a lunch break rejected, a booking that straddles
+  the break rejected, a closed day rejected, rescheduling into a closed period
+  rejected, fuzzy type matching in both directions, an unmatched type left
+  unconstrained, the catalogue reaching the model's prompt, and the model's
+  reply being replaced when it proposes a closed time.
 - **Time** — fixed-offset zones, DST zones in both seasons, a spring-forward
-  boundary, round trips, and validator edge cases.
+  boundary, round trips, weekday derivation, and validator edge cases.
 
 The AI tests run against a scripted provider stub, so they are deterministic
 and need no API key.
@@ -623,8 +724,13 @@ curl recipes, and how to break the AI on purpose to see the fallback — see
 - **One calendar per user.** No providers, staff or resources to schedule
   against — an appointment belongs to the user who booked it, and "availability"
   means "this user has nothing else then".
-- **No business hours.** Any future time is bookable. Real availability rules
-  are a product decision, not an MVP one.
+- **One set of opening hours per service**, repeating weekly, with no holidays
+  or date-specific overrides.
+- **A single application timezone.** Users do not choose one: the business and
+  everyone booking with it share `DEFAULT_TIMEZONE`. Per-user timezones were
+  removed rather than parameterised — a scheduling product for one location
+  does not need them, and carrying the concept everywhere cost more than it
+  was worth.
 - **Bookings are personal**, so a user overlapping themselves is an error worth
   blocking, while two users at the same time is fine.
 - **Duration defaults to 30 minutes** when the user does not say. The assistant
@@ -646,6 +752,18 @@ This is an MVP built to demonstrate architecture, not a production system.
 - **Rate limiting is in-process.** Multiple instances each get their own
   budget. A shared store is the fix, and is deliberately out of scope.
 - **No email verification or password reset.**
+- **Opening hours are seeded, not editable.** There is no admin UI; changing
+  them means editing `serviceCatalogue.ts` and re-seeding.
+- **Availability is enforced permissively.** An appointment type that matches
+  no service has no hours to respect, so "Mechanic at 3am" still books. Making
+  the catalogue a whitelist is a one-line change in the availability service,
+  but it is a product decision rather than a technical one.
+- **No capacity.** "Available" means the *user* has nothing else booked then,
+  not that the service has a free slot — the one-calendar-per-user assumption
+  above still holds, so two users can hold the same time.
+- **Overlapping windows are not fully prevented.** The unique constraint stops
+  two windows starting at the same minute on the same day; genuinely
+  overlapping ones would need a Postgres exclusion constraint.
 - **Appointment status does not advance on its own** — nothing moves a past
   appointment to `COMPLETED` without a scheduled job.
 - **Conversation history is truncated to the last 12 turns.** Long enough for a
@@ -668,8 +786,11 @@ This is an MVP built to demonstrate architecture, not a production system.
 
 - **Streaming responses** over SSE, so the assistant's reply appears as it is
   generated.
-- **Availability management** — business hours, buffers between appointments,
-  blackout dates, bookable resources.
+- **Availability management beyond weekly hours** — holidays and one-off
+  overrides, buffers between appointments, bookable resources and staff, and an
+  admin UI so hours stop being seed data.
+- **Free-slot computation** — the assistant currently reports opening hours;
+  subtracting existing bookings would let it offer exact times to pick from.
 - **Calendar integration** — two-way sync with Google Calendar or CalDAV.
 - **Reminders** — email or SMS, on a scheduled job.
 - **Multi-tenancy** — a `businesses` table and a `business_id` on users and
@@ -682,4 +803,3 @@ This is an MVP built to demonstrate architecture, not a production system.
   latency already recorded in `ai_interactions`.
 - **Prompt evaluation** — a regression suite of conversations checked against
   expected extractions, so a prompt edit cannot silently degrade behaviour.
-# Slotly_ai-appointment-booking

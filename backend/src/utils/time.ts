@@ -180,3 +180,30 @@ export function describeNow(timeZone: string, now: Date = new Date()) {
 export function addMinutes(instant: Date, minutes: number): Date {
   return new Date(instant.getTime() + minutes * 60_000);
 }
+
+/**
+ * Weekday of a calendar date, as 0 = Sunday .. 6 = Saturday.
+ *
+ * Anchored at noon UTC rather than midnight: a date is a pure calendar concept
+ * here, and midnight sits close enough to a DST boundary that some zones would
+ * report the previous day.
+ */
+export function weekdayIndexOf(date: string): number {
+  return new Date(`${date}T12:00:00.000Z`).getUTCDay();
+}
+
+/**
+ * Converts "HH:mm" to the value Prisma expects for a `TIME` column.
+ *
+ * Prisma models `TIME` as a `Date` pinned to 1970-01-01 with no zone applied,
+ * so the epoch date is a carrier for the wall-clock time and nothing more.
+ * Both directions live here so that assumption is stated in one place.
+ */
+export function timeToDbTime(time: string): Date {
+  return new Date(`1970-01-01T${time}:00.000Z`);
+}
+
+/** Inverse of `timeToDbTime`: reads a `TIME` column back as "HH:mm". */
+export function dbTimeToTime(value: Date): string {
+  return value.toISOString().slice(11, 16);
+}

@@ -107,12 +107,3 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong.')
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }
-
-/** The browser's IANA timezone, sent so bookings resolve to the right instant. */
-export function browserTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-}

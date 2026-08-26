@@ -21,6 +21,58 @@ BEGIN;
 -- Idempotent: re-running replaces the seeded rows rather than duplicating them.
 DELETE FROM users WHERE email IN ('demo@slotly.test', 'sam@slotly.test');
 
+-- ---------------------------------------------------------------------------
+-- Service catalogue and opening hours
+--
+-- Kept in step with backend/src/config/serviceCatalogue.ts, which is what the
+-- TypeScript seed and the test fixtures both read.
+--
+-- Rules are OPEN WINDOWS: Doctor's 09:00-12:00 and 14:00-18:00 rows leave a
+-- two-hour break between them that no booking may straddle. A weekday absent
+-- from this list is closed. weekday is 0 = Sunday .. 6 = Saturday.
+-- ---------------------------------------------------------------------------
+
+-- Re-running replaces the catalogue; the cascade clears each service's rules.
+DELETE FROM service_types
+WHERE slug IN (
+  'doctor', 'dentist', 'haircut', 'consultation',
+  'physiotherapy', 'optician', 'dermatologist'
+);
+
+INSERT INTO service_types (id, name, slug, default_duration_minutes) VALUES
+  ('a1111111-1111-4111-8111-111111111111', 'Doctor',        'doctor',        30),
+  ('a2222222-2222-4222-8222-222222222222', 'Dentist',       'dentist',       45),
+  ('a3333333-3333-4333-8333-333333333333', 'Haircut',       'haircut',       30),
+  ('a4444444-4444-4444-8444-444444444444', 'Consultation',  'consultation',  60),
+  ('a5555555-5555-4555-8555-555555555555', 'Physiotherapy', 'physiotherapy', 45),
+  ('a6666666-6666-4666-8666-666666666666', 'Optician',      'optician',      30),
+  ('a7777777-7777-4777-8777-777777777777', 'Dermatologist', 'dermatologist', 30);
+
+INSERT INTO availability_rules (service_type_id, weekday, starts_at, ends_at)
+SELECT w.service_type_id, d.weekday, w.starts_at::time, w.ends_at::time
+FROM (
+  VALUES
+    -- Doctor — weekdays, split by a two-hour lunch break.
+    ('a1111111-1111-4111-8111-111111111111'::uuid, ARRAY[1,2,3,4,5], '09:00', '12:00'),
+    ('a1111111-1111-4111-8111-111111111111'::uuid, ARRAY[1,2,3,4,5], '14:00', '18:00'),
+    -- Dentist — closed at weekends, short Friday.
+    ('a2222222-2222-4222-8222-222222222222'::uuid, ARRAY[1,2,3,4],   '09:00', '17:00'),
+    ('a2222222-2222-4222-8222-222222222222'::uuid, ARRAY[5],         '09:00', '13:00'),
+    -- Haircut — closed Sunday and Monday, open Saturday.
+    ('a3333333-3333-4333-8333-333333333333'::uuid, ARRAY[2,3,4,5],   '10:00', '19:00'),
+    ('a3333333-3333-4333-8333-333333333333'::uuid, ARRAY[6],         '09:00', '16:00'),
+    -- Consultation — weekday afternoons only.
+    ('a4444444-4444-4444-8444-444444444444'::uuid, ARRAY[1,2,3,4,5], '13:00', '17:00'),
+    -- Physiotherapy — Monday, Wednesday, Friday, also split.
+    ('a5555555-5555-4555-8555-555555555555'::uuid, ARRAY[1,3,5],     '08:00', '12:00'),
+    ('a5555555-5555-4555-8555-555555555555'::uuid, ARRAY[1,3,5],     '15:00', '19:00'),
+    -- Optician — Monday to Saturday, one continuous window.
+    ('a6666666-6666-4666-8666-666666666666'::uuid, ARRAY[1,2,3,4,5,6], '10:00', '18:00'),
+    -- Dermatologist — Tuesday and Thursday mornings.
+    ('a7777777-7777-4777-8777-777777777777'::uuid, ARRAY[2,4],       '09:00', '13:00')
+) AS w (service_type_id, weekdays, starts_at, ends_at)
+CROSS JOIN LATERAL unnest(w.weekdays) AS d (weekday);
+
 -- bcrypt hash of 'DemoPassw0rd' (cost 12).
 INSERT INTO users (id, name, email, password_hash) VALUES
   (

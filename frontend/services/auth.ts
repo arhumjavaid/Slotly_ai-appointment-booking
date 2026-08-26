@@ -15,7 +15,6 @@ export interface LoginPayload {
 /** Email is absent by design — it is fixed at registration. */
 export interface UpdateProfilePayload {
   name?: string;
-  timezone?: string;
   defaultDurationMinutes?: number;
 }
 

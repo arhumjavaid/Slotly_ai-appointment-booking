@@ -36,7 +36,6 @@ describe('authorization boundaries', () => {
     const session = await api()
       .post('/api/chat/sessions')
       .set('Cookie', owner.cookie)
-      .send({ timezone: 'UTC' })
       .expect(201);
     sessionId = session.body.data.session.id;
   });

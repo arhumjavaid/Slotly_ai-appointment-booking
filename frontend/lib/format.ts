@@ -1,5 +1,5 @@
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
-import type { AppointmentStatus } from '@/types/api';
+import type { AppointmentStatus, ServiceType } from '@/types/api';
 
 /** "2026-08-25" -> "Tue, Aug 25" (or "Today" / "Tomorrow"). */
 export function formatDateLabel(date: string): string {
@@ -62,4 +62,47 @@ export function describeMissingFields(fields: string[]): string {
 /** Minimal class joiner — avoids pulling in a dependency for six characters. */
 export function cn(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(' ');
+}
+
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export interface HoursRow {
+  /** "Mon-Fri" or "Sat". */
+  days: string;
+  /** "9:00 AM - 12:00 PM, 2:00 PM - 6:00 PM", or null when closed. */
+  hours: string | null;
+}
+
+/**
+ * Collapses a week of opening hours into the fewest readable rows.
+ *
+ * Consecutive days that share the same windows become one row, so a typical
+ * service reads "Mon-Fri" and "Sat" rather than seven near-identical lines.
+ * Closed days are kept — on this screen their absence would be ambiguous.
+ */
+export function toHoursRows(service: ServiceType): HoursRow[] {
+  // Monday first, so the working week is a single run rather than two.
+  const ordered = [1, 2, 3, 4, 5, 6, 0].map((weekday) => service.days[weekday]);
+
+  const describe = (day: (typeof ordered)[number]): string | null =>
+    day.windows.length === 0
+      ? null
+      : day.windows
+          .map((w) => `${formatTimeLabel(w.startTime)} - ${formatTimeLabel(w.endTime)}`)
+          .join(', ');
+
+  const texts = ordered.map(describe);
+  const rows: HoursRow[] = [];
+
+  for (let i = 0; i < ordered.length; ) {
+    let end = i;
+    while (end + 1 < ordered.length && texts[end + 1] === texts[i]) end += 1;
+
+    const from = SHORT_WEEKDAYS[ordered[i].weekday];
+    const to = SHORT_WEEKDAYS[ordered[end].weekday];
+    rows.push({ days: from === to ? from : `${from}-${to}`, hours: texts[i] });
+    i = end + 1;
+  }
+
+  return rows;
 }

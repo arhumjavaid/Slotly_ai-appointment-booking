@@ -6,6 +6,7 @@ import { aiService } from '../services/ai/ai.service';
 import { authRoutes } from './auth.routes';
 import { appointmentRoutes } from './appointment.routes';
 import { chatRoutes } from './chat.routes';
+import { availabilityRoutes } from './availability.routes';
 
 export const apiRouter = Router();
 
@@ -37,3 +38,4 @@ apiRouter.get(
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/appointments', appointmentRoutes);
 apiRouter.use('/chat', chatRoutes);
+apiRouter.use('/availability', availabilityRoutes);

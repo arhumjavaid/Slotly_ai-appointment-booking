@@ -1,4 +1,4 @@
-import { apiRequest, browserTimezone } from '@/lib/api';
+import { apiRequest } from '@/lib/api';
 import type {
   Appointment,
   AppointmentListResult,
@@ -33,7 +33,7 @@ export const appointmentService = {
   create(payload: CreateAppointmentPayload) {
     return apiRequest<{ appointment: Appointment }>('/appointments', {
       method: 'POST',
-      body: { timezone: browserTimezone(), ...payload },
+      body: payload,
     });
   },
 

@@ -1,11 +1,10 @@
-import { apiRequest, browserTimezone } from '@/lib/api';
+import { apiRequest } from '@/lib/api';
 import type { Appointment, ChatSession, ChatTurnResult } from '@/types/api';
 
 export const chatService = {
   createSession() {
     return apiRequest<{ session: ChatSession }>('/chat/sessions', {
       method: 'POST',
-      body: { timezone: browserTimezone() },
     });
   },
 
@@ -16,14 +15,13 @@ export const chatService = {
   sendMessage(sessionId: string, content: string) {
     return apiRequest<ChatTurnResult>(`/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
-      body: { content, timezone: browserTimezone() },
+      body: { content },
     });
   },
 
   confirm(sessionId: string) {
     return apiRequest<{ appointment: Appointment }>(`/chat/sessions/${sessionId}/confirm`, {
       method: 'POST',
-      body: { timezone: browserTimezone() },
     });
   },
 };

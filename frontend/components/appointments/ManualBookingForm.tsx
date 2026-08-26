@@ -33,6 +33,12 @@ type BookingFormValues = z.input<typeof bookingFormSchema>;
 
 const SUGGESTED_TYPES = ['Dentist', 'Doctor', 'Haircut', 'Consultation', 'Physiotherapy'];
 
+/** Server error codes worth naming in the banner heading. */
+const BANNER_TITLES: Record<string, string> = {
+  APPOINTMENT_CONFLICT: 'Time already taken',
+  OUTSIDE_AVAILABILITY: 'Closed at that time',
+};
+
 function todayIsoDate(): string {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
@@ -100,7 +106,7 @@ export function ManualBookingForm({ onBooked, defaults }: ManualBookingFormProps
   return (
     <form onSubmit={(event) => void onSubmit(event)} noValidate className="space-y-5">
       {showBanner && serverError && (
-        <Alert tone="error" title={serverError.code === 'APPOINTMENT_CONFLICT' ? 'Time already taken' : "Couldn't book that"}>
+        <Alert tone="error" title={BANNER_TITLES[serverError.code] ?? "Couldn't book that"}>
           {serverError.message}
         </Alert>
       )}
@@ -160,11 +166,7 @@ export function ManualBookingForm({ onBooked, defaults }: ManualBookingFormProps
         <Button type="submit" loading={isSubmitting || createAppointment.isPending}>
           Book appointment
         </Button>
-        {/* The booking is stored in the account's timezone, which is a setting —
-            naming it beats claiming "your local timezone" when the two differ. */}
-        <p className="text-[13px] text-ink-3">
-          {user ? `Times are in ${user.timezone}.` : 'Times are in your saved timezone.'}
-        </p>
+        <p className="text-[13px] text-ink-3">Times are local to the business.</p>
       </div>
     </form>
   );

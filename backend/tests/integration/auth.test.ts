@@ -150,11 +150,10 @@ describe('authentication', () => {
       const response = await api()
         .patch('/api/auth/me')
         .set('Cookie', user.cookie)
-        .send({ name: 'Renamed Person', timezone: 'Asia/Karachi', defaultDurationMinutes: 45 })
+        .send({ name: 'Renamed Person', defaultDurationMinutes: 45 })
         .expect(200);
 
       expect(response.body.data.user.name).toBe('Renamed Person');
-      expect(response.body.data.user.timezone).toBe('Asia/Karachi');
       expect(response.body.data.user.defaultDurationMinutes).toBe(45);
     });
 
@@ -202,14 +201,8 @@ describe('authentication', () => {
       expect(me.body.data.user.email).toBe(user.email);
     });
 
-    it('rejects an unknown timezone and an out-of-range duration', async () => {
+    it('rejects an out-of-range duration', async () => {
       const user = await createTestUser();
-
-      await api()
-        .patch('/api/auth/me')
-        .set('Cookie', user.cookie)
-        .send({ timezone: 'Mars/Olympus_Mons' })
-        .expect(400);
 
       await api()
         .patch('/api/auth/me')
